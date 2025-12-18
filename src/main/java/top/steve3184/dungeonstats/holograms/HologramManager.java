@@ -48,6 +48,17 @@ public class HologramManager {
         String mode = plugin.getConfig().getString("holograms.display-mode", "SINGLE").toUpperCase();
         plugin.getLogger().info("HologramManager: display-mode=" + mode);
 
+        // Extra diagnostics for configuration layout
+        boolean hasHologramsSection = plugin.getConfig().isConfigurationSection("holograms");
+        boolean hasMultipleDisplays = plugin.getConfig().isConfigurationSection("holograms.multiple-displays");
+        boolean hasSingleDisplay = plugin.getConfig().isConfigurationSection("holograms.single-display");
+        plugin.getLogger().info("HologramManager: config sections -> holograms=" + hasHologramsSection
+                + ", single-display=" + hasSingleDisplay + ", multiple-displays=" + hasMultipleDisplays);
+        if (hasMultipleDisplays) {
+            ConfigurationSection md = plugin.getConfig().getConfigurationSection("holograms.multiple-displays");
+            logSectionDetails("holograms.multiple-displays", md, true);
+        }
+
         if ("SINGLE".equals(mode)) {
             setupSingleMode();
         } else {
@@ -78,12 +89,31 @@ public class HologramManager {
 
     private void setupMultipleMode() {
         ConfigurationSection section = plugin.getConfig().getConfigurationSection("holograms.multiple-displays");
-        if (section == null) return;
+        if (section == null) {
+            plugin.getLogger().warning("HologramManager: 'holograms.multiple-displays' section is NULL. Config contains?="
+                    + plugin.getConfig().contains("holograms.multiple-displays")
+                    + ", isSection?=" + plugin.getConfig().isConfigurationSection("holograms.multiple-displays"));
+            // Dump top-level holograms keys for context
+            ConfigurationSection holo = plugin.getConfig().getConfigurationSection("holograms");
+            if (holo != null) logSectionDetails("holograms", holo, true);
+            return;
+        }
         plugin.getLogger().info("HologramManager: Setting up multiple holograms for leaderboard keys: " + leaderboardKeys);
         for (String key : leaderboardKeys) {
             String keyPath = key + ".location";
+            boolean containsInSection = section.contains(keyPath);
+            String absolutePath = "holograms.multiple-displays." + keyPath;
+            boolean containsAbsolute = plugin.getConfig().contains(absolutePath);
+            Object raw = plugin.getConfig().get(absolutePath);
+            String type = (raw == null ? "null" : raw.getClass().getSimpleName());
             String locStr = section.getString(keyPath);
+            plugin.getLogger().info("HologramManager: Lookup paths -> section.contains('" + keyPath + "')=" + containsInSection
+                    + ", config.contains('" + absolutePath + "')=" + containsAbsolute + ", rawType=" + type);
             plugin.getLogger().info("HologramManager: multiple-displays." + keyPath + " = " + locStr);
+            if (!containsInSection) {
+                plugin.getLogger().warning("HologramManager: Expected key missing under 'holograms.multiple-displays': '" + key
+                        + "'. Available keys here: " + section.getKeys(false));
+            }
             Location loc = parseLocation(locStr);
             if (loc != null) {
                 plugin.getLogger().info("HologramManager: Creating hologram for key='" + key + "' at " + loc);
@@ -92,6 +122,8 @@ public class HologramManager {
                 activeHolograms.add(hologram);
             } else {
                 plugin.getLogger().warning("HologramManager: Could not parse location for key='" + key + "' (value=" + locStr + ")");
+                // Suggest the closest matching keys from config to aid debugging
+                suggestClosestKeys(section, key);
             }
         }
     }
@@ -233,6 +265,7 @@ public class HologramManager {
             double x = Double.parseDouble(parts[1]);
             double y = Double.parseDouble(parts[2]);
             double z = Double.parseDouble(parts[3]);
+            plugin.getLogger().fine("HologramManager: parseLocation parts -> world='" + parts[0] + "', x=" + parts[1] + ", y=" + parts[2] + ", z=" + parts[3]);
             if (world == null) {
                 plugin.getLogger().warning("HologramManager: parseLocation - world not found: " + parts[0] + " for location string: " + locString);
                 return null;
@@ -242,6 +275,59 @@ public class HologramManager {
             plugin.getLogger().warning("HologramManager: Failed to parse location string '" + locString + "' : " + e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Dump keys and immediate values of a configuration section to help diagnose path issues.
+     */
+    private void logSectionDetails(String path, ConfigurationSection section, boolean includeChildren) {
+        try {
+            Set<String> keys = section.getKeys(includeChildren);
+            plugin.getLogger().info("HologramManager: Section dump for '" + path + "' (includeChildren=" + includeChildren + ") keys=" + keys);
+            // Print known location nodes if present
+            for (String k : keys) {
+                if (k.endsWith("location") || k.equals("location")) {
+                    String absolute = (section.getCurrentPath() == null || section.getCurrentPath().isEmpty())
+                            ? k : section.getCurrentPath() + "." + k;
+                    Object val = plugin.getConfig().get(absolute);
+                    plugin.getLogger().info("HologramManager:   node '" + absolute + "' => '" + val + "'");
+                }
+            }
+        } catch (Exception ex) {
+            plugin.getLogger().warning("HologramManager: Failed to dump section '" + path + "': " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Suggest closest keys in a section to the expected leaderboard key to catch typos/mismatches.
+     */
+    private void suggestClosestKeys(ConfigurationSection section, String expectedKey) {
+        try {
+            Set<String> available = section.getKeys(false);
+            String suggestion = available.stream()
+                    .min(Comparator.comparingInt(a -> levenshtein(a.toLowerCase(Locale.ROOT), expectedKey.toLowerCase(Locale.ROOT))))
+                    .orElse(null);
+            if (suggestion != null) {
+                plugin.getLogger().warning("HologramManager: Did you mean '" + suggestion + "'? (expected '" + expectedKey + "')");
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    // Simple Levenshtein distance for debugging suggestions only (small strings, infrequent)
+    private int levenshtein(String a, String b) {
+        int[] costs = new int[b.length() + 1];
+        for (int j = 0; j < costs.length; j++) costs[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            costs[0] = i;
+            int nw = i - 1;
+            for (int j = 1; j <= b.length(); j++) {
+                int cj = Math.min(1 + Math.min(costs[j], costs[j - 1]), a.charAt(i - 1) == b.charAt(j - 1) ? nw : nw + 1);
+                nw = costs[j];
+                costs[j] = cj;
+            }
+        }
+        return costs[b.length()];
     }
 
     private String format(String message) {
