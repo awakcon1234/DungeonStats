@@ -80,6 +80,32 @@ messages:
   stats-line-playtime: "&eTotal Playtime: &f{value}"
 ```
 
+## 🧩 PlaceholderAPI Placeholders
+
+This plugin provides placeholders via PlaceholderAPI (optional). If PlaceholderAPI is installed, placeholders are registered automatically on server start.
+
+Identifier: `dungeonstats`
+
+Player placeholders (use the player context where the placeholder is parsed):
+- %dungeonstats_kills% → player total kills
+- %dungeonstats_playtime% → player total playtime in seconds
+- %dungeonstats_maxlevel% → player highest dungeon level reached
+
+Top leaderboards (metric is one of: `kills`, `playtime`, `maxlevel`; index `n` starts at 1):
+- %dungeonstats_top_<metric>_<n>% → player name at rank n
+- %dungeonstats_top_<metric>_<n>_name% → player name at rank n
+- %dungeonstats_top_<metric>_<n>_value% → value at rank n
+
+Examples:
+- %dungeonstats_top_kills_1_name% → name of the #1 by kills
+- %dungeonstats_top_kills_1_value% → their kill count
+- %dungeonstats_top_playtime_3% → name of the #3 by playtime
+- %dungeonstats_top_maxlevel_10_value% → highest level of the #10
+
+Notes:
+- Playtime is returned as raw seconds for maximal compatibility with scoreboard plugins. Format it as desired.
+- Placeholders work in plugins that support PAPI (scoreboards, chat, holograms, etc.).
+
 ## 🔌 RESTful API Documentation
 
 If `api-server.enabled` is set to `true`, the plugin will host a simple API server on the configured port. **This discloses game data to a remote server connection and must be firewalled appropriately if you do not want it to be public.**

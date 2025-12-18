@@ -45,7 +45,7 @@ public final class DungeonStats extends JavaPlugin {
         this.hologramManager = new HologramManager(this, dataManager);
 
         getServer().getPluginManager().registerEvents(new KillListener(dataManager), this);
-        DunCommand dunCommand = new DunCommand(dataManager, getConfig());
+        DunCommand dunCommand = new DunCommand(this, dataManager);
         getCommand("dun").setExecutor(dunCommand);
         getCommand("dun").setTabCompleter(dunCommand);
 
@@ -55,6 +55,12 @@ public final class DungeonStats extends JavaPlugin {
 
         // 初始化全息图
         hologramManager.initialize();
+
+        // Register PlaceholderAPI placeholders if available
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new DungeonStatsExpansion(this, dataManager).register();
+            getLogger().info("PlaceholderAPI detected. Registered DungeonStats placeholders.");
+        }
 
         getLogger().info("Plugin DungeonStats Enabled！");
     }
@@ -66,6 +72,35 @@ public final class DungeonStats extends JavaPlugin {
         hologramManager.cleanup(); // 清理全息图实体
         saveDataConfig();
         getLogger().info("Plugin DungeonStats Disabled！");
+    }
+
+    public void reloadAll() {
+        // Cancel scheduled tasks and stop API server
+        getServer().getScheduler().cancelTasks(this);
+        if (server != null) {
+            try { server.stop(0); } catch (Exception ignored) {} finally { server = null; }
+        }
+
+        // Cleanup holograms
+        if (hologramManager != null) {
+            hologramManager.cleanup();
+        }
+
+        // Reload main config and data file
+        reloadConfig();
+        if (dataFile != null) {
+            this.dataConfig = YamlConfiguration.loadConfiguration(dataFile);
+        }
+
+        // Reinitialize runtime features based on refreshed config
+        if (hologramManager != null) {
+            hologramManager.initialize();
+        }
+        startLogCheckerTask();
+        startPlaytimeTrackerTask();
+        setupApiServer();
+
+        getLogger().info("DungeonStats reloaded.");
     }
 
     private void setupApiServer() {

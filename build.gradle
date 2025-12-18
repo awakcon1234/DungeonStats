@@ -10,12 +10,16 @@ version = '1.0'
 
 repositories {
     mavenCentral()
+    // PlaceholderAPI repository for compileOnly dependency
+    maven { url 'https://repo.extendedclip.com/content/repositories/placeholderapi/' }
 }
 
 dependencies {
     paperweight.paperDevBundle("1.21.1-R0.1-SNAPSHOT")
     // 添加 Google 的 Gson 库，用于处理 JSON
     implementation 'com.google.code.gson:gson:2.10.1'
+    // PlaceholderAPI is provided at runtime by the server, keep it as compileOnly
+    compileOnly 'me.clip:placeholderapi:2.11.6'
 }
 
 // 配置 shadowJar 任务

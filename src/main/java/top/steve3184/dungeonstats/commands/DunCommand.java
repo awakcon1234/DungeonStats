@@ -5,8 +5,8 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import top.steve3184.dungeonstats.DungeonStats;
 import top.steve3184.dungeonstats.model.PlayerStats;
 import top.steve3184.dungeonstats.utils.DataManager;
 
@@ -17,12 +17,12 @@ import java.util.stream.Collectors;
 
 public class DunCommand implements CommandExecutor, TabCompleter {
 
+    private final DungeonStats plugin;
     private final DataManager dataManager;
-    private final FileConfiguration config;
 
-    public DunCommand(DataManager dataManager, FileConfiguration config) {
+    public DunCommand(DungeonStats plugin, DataManager dataManager) {
+        this.plugin = plugin;
         this.dataManager = dataManager;
-        this.config = config;
     }
 
     @Override
@@ -38,6 +38,7 @@ public class DunCommand implements CommandExecutor, TabCompleter {
             case "killtop" -> showTopList(sender, "kills");
             case "playtimetop" -> showTopList(sender, "playtime");
             case "maxleveltop" -> showTopList(sender, "maxlevel");
+            case "reload" -> reloadPlugin(sender);
             default -> sendUsage(sender);
         }
         return true;
@@ -50,27 +51,27 @@ public class DunCommand implements CommandExecutor, TabCompleter {
         } else if (sender instanceof Player) {
             targetName = sender.getName();
         } else {
-            sender.sendMessage(format(config.getString("messages.command-usage")));
+            sender.sendMessage(format(plugin.getConfig().getString("messages.command-usage")));
             return;
         }
 
         PlayerStats stats = dataManager.getPlayerStats(targetName);
         if (stats == null) {
-            sender.sendMessage(format(config.getString("messages.command-player-not-found").replace("{player_name}", targetName)));
+            sender.sendMessage(format(plugin.getConfig().getString("messages.command-player-not-found").replace("{player_name}", targetName)));
             return;
         }
 
-        sender.sendMessage(format(config.getString("messages.stats-title").replace("{player_name}", stats.playerName())));
-        sender.sendMessage(format(config.getString("messages.stats-line-maxlevel").replace("{value}", String.valueOf(stats.maxLevel()))));
-        sender.sendMessage(format(config.getString("messages.stats-line-kills").replace("{value}", String.valueOf(stats.kills()))));
-        sender.sendMessage(format(config.getString("messages.stats-line-playtime").replace("{value}", formatSeconds(stats.playtimeSeconds()))));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.stats-title").replace("{player_name}", stats.playerName())));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.stats-line-maxlevel").replace("{value}", String.valueOf(stats.maxLevel()))));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.stats-line-kills").replace("{value}", String.valueOf(stats.kills()))));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.stats-line-playtime").replace("{value}", formatSeconds(stats.playtimeSeconds()))));
     }
 
     private void showTopList(CommandSender sender, String key) {
-        sender.sendMessage(format(config.getString("messages.title-" + key)));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.title-" + key)));
         List<PlayerStats> topPlayers = dataManager.getTopPlayers(key, 10);
         if (topPlayers.isEmpty()) {
-            sender.sendMessage(format(config.getString("messages.command-no-data")));
+            sender.sendMessage(format(plugin.getConfig().getString("messages.command-no-data")));
             return;
         }
 
@@ -84,12 +85,12 @@ public class DunCommand implements CommandExecutor, TabCompleter {
                     default -> "";
                 };
                 String rankColor = switch (i) {
-                    case 0 -> config.getString("messages.rank-color-1");
-                    case 1 -> config.getString("messages.rank-color-2");
-                    case 2 -> config.getString("messages.rank-color-3");
-                    default -> config.getString("messages.rank-color-default");
+                    case 0 -> plugin.getConfig().getString("messages.rank-color-1");
+                    case 1 -> plugin.getConfig().getString("messages.rank-color-2");
+                    case 2 -> plugin.getConfig().getString("messages.rank-color-3");
+                    default -> plugin.getConfig().getString("messages.rank-color-default");
                 };
-                String entry = config.getString("messages.rank-entry")
+                String entry = plugin.getConfig().getString("messages.rank-entry")
                         .replace("{rank}", String.valueOf(i + 1))
                         .replace("{player_name}", stats.playerName())
                         .replace("{value}", valueStr);
@@ -98,6 +99,15 @@ public class DunCommand implements CommandExecutor, TabCompleter {
                 // sender.sendMessage(" "); // 补充空行
             }
         }
+    }
+
+    private void reloadPlugin(CommandSender sender) {
+        if (!(sender.isOp() || sender.hasPermission("dungeonstats.reload"))) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            return;
+        }
+        plugin.reloadAll();
+        sender.sendMessage(ChatColor.GREEN + "DungeonStats reloaded.");
     }
 
     private String formatSeconds(long totalSeconds) {
@@ -112,13 +122,17 @@ public class DunCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage(format(config.getString("messages.command-usage")));
+        sender.sendMessage(format(plugin.getConfig().getString("messages.command-usage")));
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("stats", "killtop", "playtimetop", "maxleveltop").stream()
+            List<String> base = Arrays.asList("stats", "killtop", "playtimetop", "maxleveltop");
+            if (sender.isOp() || sender.hasPermission("dungeonstats.reload")) {
+                base = Arrays.asList("stats", "killtop", "playtimetop", "maxleveltop", "reload");
+            }
+            return base.stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());
         }
